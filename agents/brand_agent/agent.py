@@ -5,6 +5,55 @@ from typing import List, Dict
 
 from core import memory
 from core.schemas import AgentOutput
+from core.llm import ask as llm_ask, is_available as llm_ready
+
+
+def _ai_slogans(name: str, ticker: str, narrative: str, meme: str) -> list:
+    if not llm_ready():
+        return []
+    prompt = f"""Generate 5 punchy, viral crypto token slogans for ${ticker} ({name}).
+Concept: {narrative}
+Meme angle: {meme}
+Rules: Short (max 10 words each). Crypto-native tone. No financial promises. Witty, shareable.
+Return ONLY 5 slogans, one per line, no numbers or bullets."""
+    result = llm_ask(prompt, fallback="")
+    if result:
+        return [s.strip() for s in result.strip().split("\n") if s.strip()][:5]
+    return []
+
+
+def _ai_manifesto(name: str, ticker: str, narrative: str, why_now: str) -> str:
+    if not llm_ready():
+        return ""
+    prompt = f"""Write a powerful, emotional crypto token manifesto for {name} (${ticker}).
+Concept: {narrative}
+Why now: {why_now}
+Style: Short paragraphs. Raw, honest, internet-native voice. No hype, no promises. Pure conviction.
+Max 120 words. Make it feel like a founding document."""
+    return llm_ask(prompt, fallback="")
+
+
+def _ai_website_copy(name: str, ticker: str, narrative: str, community: str) -> dict:
+    if not llm_ready():
+        return {}
+    prompt = f"""Write website copy for {name} (${ticker}) crypto token.
+Concept: {narrative}
+Target community: {community}
+Return exactly these 3 sections labeled:
+HERO: [one punchy headline, max 8 words]
+ABOUT: [2 sentence about section, crypto-native tone]
+TOKENOMICS: [one sentence fair launch statement]"""
+    result = llm_ask(prompt, fallback="")
+    copy = {}
+    if result:
+        for line in result.split("\n"):
+            if line.startswith("HERO:"):
+                copy["hero_headline"] = line.replace("HERO:", "").strip()
+            elif line.startswith("ABOUT:"):
+                copy["about_section"] = line.replace("ABOUT:", "").strip()
+            elif line.startswith("TOKENOMICS:"):
+                copy["tokenomics_intro"] = line.replace("TOKENOMICS:", "").strip()
+    return copy
 
 
 def _generate_brand(concept: Dict) -> Dict:
@@ -13,6 +62,26 @@ def _generate_brand(concept: Dict) -> Dict:
     narrative = concept.get("one_line_narrative", "")
     community = concept.get("target_community", "crypto community")
     meme = concept.get("meme_angle", "")
+    why_now = concept.get("why_now", "")
+
+    # AI-generated content (falls back to templates if no key)
+    ai_slogans   = _ai_slogans(name, ticker, narrative, meme)
+    ai_manifesto = _ai_manifesto(name, ticker, narrative, why_now)
+    ai_copy      = _ai_website_copy(name, ticker, narrative, community)
+
+    slogans = ai_slogans if ai_slogans else [
+        f"${ticker} — {narrative[:60]}",
+        "The coin the internet was waiting for.",
+        "Not just a token. A movement.",
+        "Built by the community. For the community.",
+        "Early is everything. You're early.",
+    ]
+
+    manifesto = ai_manifesto if ai_manifesto else (
+        f"We are {name}.\n\nWe didn't start with a VC deck. We started with a meme.\n\n"
+        f"Every great movement starts as a joke. Then it becomes inevitable.\n\n"
+        f"${ticker} is our bet on the internet. On community. On timing.\n\nWelcome to {name}."
+    )
 
     return {
         "id": f"brand_{str(uuid.uuid4())[:8]}",
@@ -28,13 +97,7 @@ def _generate_brand(concept: Dict) -> Dict:
             f"{ticker}X",
             ticker[:3],
         ],
-        "slogans": [
-            f"${ticker} — {narrative[:60]}",
-            f"The coin the internet was waiting for.",
-            f"Not just a token. A movement.",
-            f"Built by the community. For the community.",
-            f"Early is everything. You're early.",
-        ],
+        "slogans": slogans,
         "tone_of_voice": (
             f"Confident, irreverent, and self-aware. The {name} brand speaks like "
             f"the smartest person in the room who refuses to take themselves too seriously. "
@@ -53,16 +116,15 @@ def _generate_brand(concept: Dict) -> Dict:
             f"Abstract geometric mark for {ticker} token. Sacred geometry inspired. Gradient from purple to cyan.",
         ],
         "website_copy": {
-            "hero_headline": f"${ticker}",
+            "hero_headline": ai_copy.get("hero_headline", f"${ticker}"),
             "hero_subheadline": narrative,
             "cta_primary": "Join the Community",
             "cta_secondary": "Read the Manifesto",
-            "about_section": (
-                f"{name} is a community-driven token born from the intersection of "
-                f"internet culture and crypto. {narrative} "
+            "about_section": ai_copy.get("about_section", (
+                f"{name} is a community-driven token born from internet culture and crypto. {narrative} "
                 f"We don't promise returns. We promise a movement."
-            ),
-            "tokenomics_intro": "Fair launch. Community first. No VC allocation. No insider advantage.",
+            )),
+            "tokenomics_intro": ai_copy.get("tokenomics_intro", "Fair launch. Community first. No VC allocation."),
             "footer_disclaimer": (
                 f"${ticker} is a community token. Nothing on this website constitutes financial advice. "
                 f"Crypto assets are highly volatile. Never invest more than you can afford to lose. DYOR."
@@ -104,16 +166,7 @@ Target: {community}
 ## Disclaimer
 {ticker} is a community meme token. This is not financial advice. DYOR.
 """,
-        "manifesto": (
-            f"We are {name}.\n\n"
-            f"We didn't start with a VC deck. We started with a meme.\n\n"
-            f"Every great movement starts as a joke. Then it becomes a possibility. "
-            f"Then it becomes inevitable.\n\n"
-            f"${ticker} is our bet on the internet. On community. On timing.\n\n"
-            f"Not a roadmap. A vibe. Not a whitepaper. A feeling.\n\n"
-            f"Early is everything.\n\n"
-            f"Welcome to {name}."
-        ),
+        "manifesto": manifesto,
         "meme_language": [
             f"WAGMI {ticker}",
             f"${ticker} szn is here",

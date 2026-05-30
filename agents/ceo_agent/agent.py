@@ -5,6 +5,7 @@ from typing import List, Dict, Any
 
 from core import memory
 from core.schemas import AgentOutput
+from core.llm import ask as llm_ask, is_available as llm_ready
 
 
 def _build_decision_report(best: Dict, all_scored: List[Dict], risks: Dict[str, Dict]) -> str:
@@ -12,6 +13,40 @@ def _build_decision_report(best: Dict, all_scored: List[Dict], risks: Dict[str, 
     ticker = best.get("ticker", "TKN")
     score = best.get("_final_score", 0)
     risk = risks.get(best.get("id", ""), {})
+
+    if llm_ready():
+        prompt = f"""You are the CEO of a crypto token launch firm. Write a sharp, confident investment decision report for launching {name} (${ticker}).
+
+Token concept: {best.get('one_line_narrative', '')}
+Target community: {best.get('target_community', '')}
+Meme angle: {best.get('meme_angle', '')}
+Opportunity score: {score:.1f}/100
+Meme potential: {best.get('meme_potential', 0)}/100
+Community potential: {best.get('community_potential', 0)}/100
+Timing: {best.get('timing', 0)}/100
+Risk score: {risk.get('overall_risk_score', 5)}/10
+
+Write a 3-paragraph CEO decision memo: why this token, why now, and the key risks to manage. Be direct, crypto-native in tone. Max 200 words."""
+        ai_memo = llm_ask(prompt, fallback="")
+        if ai_memo:
+            return f"""# CEO Decision Report
+Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
+
+## RECOMMENDATION: {name} (${ticker})
+**Final Opportunity Score:** {score:.1f}/100
+
+{ai_memo}
+
+### Required Next Actions
+1. Human founder approval
+2. Brand package review and approval
+3. Smart contract audit
+4. Social infrastructure setup (Telegram, Discord)
+5. First 7-day content calendar approval
+
+---
+*All decisions require human approval before execution.*
+"""
 
     return f"""# CEO Decision Report
 Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}

@@ -5,6 +5,57 @@ from typing import List, Dict
 
 from core import memory
 from core.schemas import AgentOutput
+from core.llm import ask as llm_ask, is_available as llm_ready
+
+
+def _ai_posts(concept: Dict, platform: str, count: int = 3) -> List[Dict]:
+    """Generate AI-written social posts for a given platform."""
+    if not llm_ready():
+        return []
+    name   = concept.get("token_name", "Token")
+    ticker = concept.get("ticker", "TKN")
+    narrative = concept.get("one_line_narrative", "")
+    meme   = concept.get("meme_angle", "")
+    why    = concept.get("why_now", "")
+
+    platform_rules = {
+        "twitter": "Short, punchy tweets max 280 chars. Use $TICKER format. Crypto-native tone. End with a hook or CTA.",
+        "reddit":  "Longer, thoughtful post with a title line starting '## '. Educational but still exciting. Add 'DYOR. Not financial advice.' at the end.",
+        "telegram":"Friendly, community-first tone. Use emojis. Max 200 chars. Welcome/hype vibe.",
+        "discord": "Casual, fun, community tone. Use @everyone style energy. Short.",
+        "tiktok":  "Hook in first 3 words. Energetic. Use trending sounds reference. Max 150 chars.",
+    }
+
+    prompt = f"""Write {count} original social media posts for ${ticker} ({name}) for {platform}.
+Concept: {narrative}
+Meme angle: {meme}
+Why now: {why}
+Platform rules: {platform_rules.get(platform, 'Engaging, short, crypto-native.')}
+
+Return ONLY the posts, separated by ---
+No numbering, no labels, just the post content."""
+
+    result = llm_ask(prompt, fallback="")
+    if not result:
+        return []
+
+    posts = []
+    for i, text in enumerate(result.split("---")):
+        text = text.strip()
+        if text:
+            posts.append({
+                "id": f"draft_{str(uuid.uuid4())[:8]}",
+                "token_idea_id": concept.get("id", ""),
+                "platform": platform,
+                "post_type": "ai_generated",
+                "content": text,
+                "goal": f"AI-generated {platform} content for {name}",
+                "scheduled_for": (datetime.utcnow() + timedelta(days=i+1)).isoformat(),
+                "approval_status": "pending",
+                "created_at": datetime.utcnow().isoformat(),
+                "source": "gemini",
+            })
+    return posts
 
 PLATFORMS = ["twitter", "reddit", "telegram", "discord", "tiktok"]
 
