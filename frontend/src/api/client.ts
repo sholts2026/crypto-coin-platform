@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 const BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api'
 
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
