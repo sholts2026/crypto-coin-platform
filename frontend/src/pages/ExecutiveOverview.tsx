@@ -21,17 +21,21 @@ function StatCard({ icon: Icon, label, value, color = 'text-green-400' }: {
 export default function ExecutiveOverview() {
   const [data, setData] = useState<Overview | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>('')
 
   useEffect(() => {
-    api.overview().then((d: any) => { setData(d); setLoading(false) }).catch(() => setLoading(false))
+    api.overview()
+      .then((d: any) => { setData(d); setLoading(false) })
+      .catch((e: any) => { setError(String(e)); setLoading(false) })
   }, [])
 
   if (loading) return <div className="p-8 text-slate-400 animate-pulse">Loading overview...</div>
   if (!data) return (
     <div className="p-8">
-      <div className="card max-w-lg">
-        <p className="text-slate-400 mb-3">Backend not running.</p>
-        <p className="text-sm text-slate-500">Start the backend: <code className="text-green-400">python backend/main.py</code></p>
+      <div className="card max-w-2xl">
+        <p className="text-red-400 font-bold mb-3">Connection error</p>
+        <p className="text-slate-300 text-sm font-mono break-all mb-3">{error || 'Unknown error'}</p>
+        <p className="text-slate-500 text-xs">Target: {(window as any).__API_BASE__ || 'check console'}</p>
       </div>
     </div>
   )
