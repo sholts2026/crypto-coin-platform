@@ -3,7 +3,6 @@
 @tailwind utilities;
 
 @layer base {
-  html { @apply dark; }
   body { @apply bg-[#0f1117] text-slate-100 font-sans antialiased; }
   ::-webkit-scrollbar { @apply w-1.5 h-1.5; }
   ::-webkit-scrollbar-track { @apply bg-transparent; }
