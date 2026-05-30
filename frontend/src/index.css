@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { @apply dark; }
+  body { @apply bg-[#0f1117] text-slate-100 font-sans antialiased; }
+  ::-webkit-scrollbar { @apply w-1.5 h-1.5; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-slate-700 rounded-full; }
+}
+
+@layer components {
+  .card { @apply bg-[#1a1d27] border border-slate-800 rounded-xl p-5; }
+  .badge-pending  { @apply px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-500/20 text-yellow-400; }
+  .badge-approved { @apply px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-400; }
+  .badge-rejected { @apply px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/20 text-red-400; }
+  .badge-revision { @apply px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400; }
+  .btn-primary    { @apply bg-green-500 hover:bg-green-400 text-black font-semibold px-4 py-2 rounded-lg transition-colors text-sm; }
+  .btn-danger     { @apply bg-red-500/20 hover:bg-red-500/40 text-red-400 font-semibold px-4 py-2 rounded-lg transition-colors text-sm border border-red-500/30; }
+  .btn-ghost      { @apply bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold px-4 py-2 rounded-lg transition-colors text-sm; }
+  .stat-card      { @apply card flex flex-col gap-1; }
+  .score-high     { @apply text-green-400 font-bold; }
+  .score-mid      { @apply text-yellow-400 font-bold; }
+  .score-low      { @apply text-red-400 font-bold; }
+}

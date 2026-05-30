@@ -1,0 +1,186 @@
+from __future__ import annotations
+import uuid
+from datetime import datetime
+from typing import List, Dict, Any
+
+from core import memory
+from core.scoring import score_trend
+from core.schemas import AgentOutput
+
+
+MOCK_TRENDS = [
+    {
+        "phrase": "AI agents doing crypto trades",
+        "source_platform": "twitter",
+        "velocity_score": 88, "novelty_score": 82, "meme_potential": 79,
+        "crypto_relevance": 95, "community_size": 72, "saturation_level": 25,
+        "expected_lifespan_days": 21,
+        "related_communities": ["AI Twitter", "DeFi CT", "Autonomous agents Discord"],
+        "related_figures": ["@elonmusk", "@VitalikButerin", "@sama"],
+        "why_it_matters": "Autonomous AI agents with wallets are live. New token narrative: 'AI-native money'.",
+        "token_narrative_opportunities": [
+            "Native currency for AI agent transactions",
+            "Meme: AI agents are here for your bags",
+            "Utility token rewarding humans who deploy agents"
+        ],
+        "raw_data": {"tweet_volume_24h": 142000, "reddit_mentions": 4800, "google_trend_index": 78}
+    },
+    {
+        "phrase": "pepe has a son",
+        "source_platform": "reddit",
+        "velocity_score": 94, "novelty_score": 71, "meme_potential": 97,
+        "crypto_relevance": 88, "community_size": 91, "saturation_level": 40,
+        "expected_lifespan_days": 14,
+        "related_communities": ["r/memecoins", "r/CryptoCurrency", "4chan /biz/"],
+        "related_figures": [],
+        "why_it_matters": "Pepe lineage memes have massive CT loyalty. 'Son' framing is fresh next-gen narrative.",
+        "token_narrative_opportunities": [
+            "PEPEJI — next generation Pepe meme coin",
+            "Baby Pepe who learned DeFi",
+            "Community decides frog identity"
+        ],
+        "raw_data": {"tweet_volume_24h": 88000, "reddit_mentions": 12000, "google_trend_index": 61}
+    },
+    {
+        "phrase": "dogs with jobs meme wave",
+        "source_platform": "tiktok",
+        "velocity_score": 86, "novelty_score": 69, "meme_potential": 92,
+        "crypto_relevance": 70, "community_size": 88, "saturation_level": 32,
+        "expected_lifespan_days": 18,
+        "related_communities": ["TikTok Pets", "Reddit aww", "Doge communities"],
+        "related_figures": [],
+        "why_it_matters": "Dog-with-job memes: 340M TikTok views in 48h. Enormous normie crossover.",
+        "token_narrative_opportunities": [
+            "WOOF — employed dog token",
+            "GOODBOY — token for doing right in crypto",
+            "LABRADOR — stable as a retriever"
+        ],
+        "raw_data": {"tweet_volume_24h": 55000, "tiktok_views_48h": 340000000}
+    },
+    {
+        "phrase": "nuclear energy crypto mining",
+        "source_platform": "youtube",
+        "velocity_score": 71, "novelty_score": 85, "meme_potential": 55,
+        "crypto_relevance": 80, "community_size": 58, "saturation_level": 15,
+        "expected_lifespan_days": 45,
+        "related_communities": ["Energy Twitter", "Bitcoin Miners", "Tech YouTube"],
+        "related_figures": ["@TuurDemeester"],
+        "why_it_matters": "Nuclear-powered mining backed by US states. Early, institutional, macro tailwinds.",
+        "token_narrative_opportunities": [
+            "Clean-energy mining credit token",
+            "REACTOR — unstoppable energy meme",
+            "Energy sovereignty narrative"
+        ],
+        "raw_data": {"tweet_volume_24h": 31000, "reddit_mentions": 2100, "google_trend_index": 55}
+    },
+    {
+        "phrase": "on-chain identity crisis",
+        "source_platform": "crypto_news",
+        "velocity_score": 62, "novelty_score": 90, "meme_potential": 48,
+        "crypto_relevance": 93, "community_size": 55, "saturation_level": 10,
+        "expected_lifespan_days": 60,
+        "related_communities": ["ENS community", "Ethereum builders", "Privacy advocates"],
+        "related_figures": ["@VitalikButerin", "@nicksdjohnson"],
+        "why_it_matters": "On-chain identity is a core emerging primitive. Early movers capture developer mindshare.",
+        "token_narrative_opportunities": [
+            "SOUL — soulbound token economy",
+            "SELF — you are your on-chain history",
+            "PROOF — prove yourself without revealing everything"
+        ],
+        "raw_data": {"tweet_volume_24h": 18000, "reddit_mentions": 3400, "google_trend_index": 42}
+    },
+]
+
+
+class TrendHunterAgent:
+    NAME = "trend_hunter_agent"
+
+    def __init__(self, use_mock: bool = True):
+        self.use_mock = use_mock
+
+    def run(self) -> AgentOutput:
+        raw_trends = self._fetch_trends()
+        trends = self._process_trends(raw_trends)
+        memory.save_trends(trends)
+        output = AgentOutput(
+            timestamp=datetime.utcnow(),
+            agent_name=self.NAME,
+            input_summary=f"Collected {len(trends)} trends from {'mock data' if self.use_mock else 'live APIs'}",
+            output=trends,
+            score=self._avg_score(trends),
+            next_recommended_action="Run generate-token-ideas to convert top trends into token concepts",
+        )
+        return output
+
+    def _fetch_trends(self) -> List[Dict]:
+        if self.use_mock:
+            return MOCK_TRENDS
+        return self._fetch_live_trends()
+
+    def _fetch_live_trends(self) -> List[Dict]:
+        """Live API adapters. Falls back to mock if keys not set."""
+        results = []
+        results += self._fetch_twitter_trends()
+        results += self._fetch_reddit_trends()
+        results += self._fetch_google_trends()
+        if not results:
+            return MOCK_TRENDS
+        return results
+
+    def _fetch_twitter_trends(self) -> List[Dict]:
+        from core.config import settings
+        if not settings.twitter_api_key:
+            return []
+        # Adapter stub — replace with tweepy or twitter-api-v2 client
+        return []
+
+    def _fetch_reddit_trends(self) -> List[Dict]:
+        from core.config import settings
+        if not settings.reddit_client_id:
+            return []
+        # Adapter stub — replace with praw
+        return []
+
+    def _fetch_google_trends(self) -> List[Dict]:
+        from core.config import settings
+        if not settings.google_trends_enabled:
+            return []
+        # Adapter stub — replace with pytrends
+        return []
+
+    def _process_trends(self, raw: List[Dict]) -> List[Dict]:
+        processed = []
+        for i, t in enumerate(raw):
+            trend_score = score_trend(
+                velocity=t.get("velocity_score", 50),
+                novelty=t.get("novelty_score", 50),
+                meme=t.get("meme_potential", 50),
+                crypto_rel=t.get("crypto_relevance", 50),
+                community=t.get("community_size", 50),
+                saturation=t.get("saturation_level", 50),
+            )
+            processed.append({
+                "id": f"trend_{str(uuid.uuid4())[:8]}",
+                "phrase": t["phrase"],
+                "source_platform": t.get("source_platform", "unknown"),
+                "detected_at": datetime.utcnow().isoformat(),
+                "velocity_score": t.get("velocity_score", 50),
+                "novelty_score": t.get("novelty_score", 50),
+                "meme_potential": t.get("meme_potential", 50),
+                "crypto_relevance": t.get("crypto_relevance", 50),
+                "community_size": t.get("community_size", 50),
+                "saturation_level": t.get("saturation_level", 50),
+                "expected_lifespan_days": t.get("expected_lifespan_days", 14),
+                "related_communities": t.get("related_communities", []),
+                "related_figures": t.get("related_figures", []),
+                "why_it_matters": t.get("why_it_matters", ""),
+                "token_narrative_opportunities": t.get("token_narrative_opportunities", []),
+                "raw_data": t.get("raw_data", {}),
+                "composite_score": trend_score,
+            })
+        return sorted(processed, key=lambda x: x["composite_score"], reverse=True)
+
+    def _avg_score(self, trends: List[Dict]) -> float:
+        if not trends:
+            return 0.0
+        return round(sum(t.get("composite_score", 0) for t in trends) / len(trends), 2)

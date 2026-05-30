@@ -1,0 +1,15 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+node_modules/
+dist/
+build/
+*.db
+*.sqlite
+*.sqlite3
+logs/
+data/crypto_coin.db
+.vscode/
+.idea/
