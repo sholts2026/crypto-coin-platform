@@ -58,6 +58,16 @@ def health():
     return {"status": "ok"}
 
 
+@app.on_event("startup")
+def startup_event():
+    try:
+        from telegram_bot.bot import start_bot_thread
+        start_bot_thread()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Telegram bot startup skipped: {e}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
