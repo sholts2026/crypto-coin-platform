@@ -20,7 +20,7 @@ def _init():
     try:
         import google.generativeai as genai
         genai.configure(api_key=key)
-        _model = genai.GenerativeModel("gemini-1.5-pro")
+        _model = genai.GenerativeModel("gemini-1.5-flash")
         logger.info("Gemini Pro initialised ✓")
         return True
     except Exception as e:
