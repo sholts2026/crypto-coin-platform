@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 
 from backend.api import (
-    trends, tokens, decisions, social, brand, risk, contracts, launch, agents, reports, overview
+    trends, tokens, decisions, social, brand, risk, contracts, launch, agents, reports, overview, system
 )
 
 app = FastAPI(
@@ -41,6 +41,7 @@ app.include_router(contracts.router)
 app.include_router(launch.router)
 app.include_router(agents.router)
 app.include_router(reports.router)
+app.include_router(system.router)
 
 
 @app.get("/")
