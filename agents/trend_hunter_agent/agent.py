@@ -118,8 +118,9 @@ class TrendHunterAgent:
         return self._fetch_live_trends()
 
     def _fetch_live_trends(self) -> List[Dict]:
-        """Live API adapters. Falls back to mock if keys not set."""
+        """Live API adapters. Falls back to mock if all sources fail."""
         results = []
+        results += self._fetch_coingecko_trends()   # free, no key needed ✓
         results += self._fetch_twitter_trends()
         results += self._fetch_reddit_trends()
         results += self._fetch_google_trends()
@@ -147,6 +148,77 @@ class TrendHunterAgent:
             return []
         # Adapter stub — replace with pytrends
         return []
+
+    def _fetch_coingecko_trends(self) -> List[Dict]:
+        """Fetch real trending coins from CoinGecko (free, no API key needed)."""
+        try:
+            import httpx
+            from core.llm import ask as llm_ask, is_available as llm_ready
+
+            results = []
+
+            # 1. Trending coins (top 7 in 24h)
+            r = httpx.get(
+                "https://api.coingecko.com/api/v3/search/trending",
+                headers={"Accept": "application/json"},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                coins = r.json().get("coins", [])
+                for entry in coins[:7]:
+                    coin = entry.get("item", {})
+                    name   = coin.get("name", "Unknown")
+                    symbol = coin.get("symbol", "???").upper()
+                    rank   = coin.get("market_cap_rank") or 999
+                    phrase = f"{name} ({symbol}) trending on CoinGecko"
+
+                    # Use AI to analyse why this coin is trending
+                    why = ""
+                    opportunities = []
+                    if llm_ready():
+                        prompt = f"""A crypto coin called {name} (${symbol}) is currently trending on CoinGecko (rank #{rank}).
+In 1-2 sentences, explain why this might be trending and what meme/narrative opportunity it creates for a new token launch.
+Then list 2-3 short token narrative ideas (each max 8 words).
+Format:
+WHY: <reason>
+IDEAS:
+- <idea 1>
+- <idea 2>
+- <idea 3>"""
+                        raw = llm_ask(prompt, fallback="")
+                        lines = raw.splitlines()
+                        for line in lines:
+                            if line.startswith("WHY:"):
+                                why = line[4:].strip()
+                            elif line.strip().startswith("-"):
+                                opportunities.append(line.strip().lstrip("- ").strip())
+
+                    results.append({
+                        "phrase": phrase,
+                        "source_platform": "crypto_news",
+                        "velocity_score": max(30, min(95, 100 - rank // 2)),
+                        "novelty_score":  70,
+                        "meme_potential": 75,
+                        "crypto_relevance": 95,
+                        "community_size": max(40, min(90, 90 - rank // 10)),
+                        "saturation_level": min(60, rank // 5),
+                        "expected_lifespan_days": 7,
+                        "related_communities": ["CT", "CoinGecko community", f"${symbol} holders"],
+                        "related_figures": [],
+                        "why_it_matters": why or f"{name} is in CoinGecko top trending — high visibility window.",
+                        "token_narrative_opportunities": opportunities or [
+                            f"Rival or successor to {name}",
+                            f"Community fork of {name} narrative",
+                        ],
+                        "raw_data": {"coingecko_rank": rank, "symbol": symbol},
+                    })
+
+            return results
+
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"CoinGecko fetch failed: {e}")
+            return []
 
     def _process_trends(self, raw: List[Dict]) -> List[Dict]:
         processed = []
