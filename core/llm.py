@@ -12,6 +12,15 @@ _client = None
 _model  = None
 
 
+CANDIDATE_MODELS = [
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-pro",
+    "gemini-pro",
+    "gemini-1.0-pro",
+]
+
+
 def _init():
     global _client, _model
     key = os.environ.get("GEMINI_API_KEY", "") or os.environ.get("gemini_api_key", "")
@@ -20,9 +29,19 @@ def _init():
     try:
         import google.generativeai as genai
         genai.configure(api_key=key)
-        _model = genai.GenerativeModel("gemini-1.5-flash")
-        logger.info("Gemini Pro initialised ✓")
-        return True
+        for model_name in CANDIDATE_MODELS:
+            try:
+                m = genai.GenerativeModel(model_name)
+                # Quick probe — confirms the model is reachable
+                m.generate_content("hi", generation_config={"max_output_tokens": 5})
+                _model = m
+                logger.info(f"Gemini initialised with model: {model_name} ✓")
+                return True
+            except Exception as probe_err:
+                logger.debug(f"Model {model_name} not available: {probe_err}")
+                continue
+        logger.warning("No Gemini model found — all candidates failed")
+        return False
     except Exception as e:
         logger.warning(f"Gemini init failed: {e}")
         return False

@@ -16,15 +16,32 @@ def gemini_test():
             "key_preview": None,
         }
 
+    candidates = [
+        "gemini-1.5-flash", "gemini-1.5-flash-latest",
+        "gemini-1.5-pro", "gemini-pro", "gemini-1.0-pro",
+    ]
     try:
         import google.generativeai as genai
         genai.configure(api_key=key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content("Say exactly: GEMINI_OK")
-        text = response.text.strip()
+        for model_name in candidates:
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(
+                    "Say exactly: GEMINI_OK",
+                    generation_config={"max_output_tokens": 10},
+                )
+                return {
+                    "gemini_connected": True,
+                    "model_used": model_name,
+                    "response": response.text.strip(),
+                    "key_preview": f"{key[:6]}...{key[-4:]}",
+                }
+            except Exception as e:
+                continue
         return {
-            "gemini_connected": True,
-            "response": text,
+            "gemini_connected": False,
+            "reason": "All model candidates failed",
+            "tried": candidates,
             "key_preview": f"{key[:6]}...{key[-4:]}",
         }
     except Exception as e:
