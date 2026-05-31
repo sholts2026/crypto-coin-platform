@@ -32,7 +32,21 @@ def approve_decision(decision_id: str, req: ApprovalRequest = ApprovalRequest())
             if dec.get("launch_checklist_status"):
                 dec["launch_checklist_status"]["human_approval_received"] = True
             memory.save_decisions(decs)
-            return {"status": "approved", "id": decision_id}
+
+            # Auto-broadcast CEO decision to community channels
+            broadcast_result = {"telegram": False, "discord": False, "channels_reached": 0}
+            try:
+                from agents.community_agent.agent import CommunityAgent
+                broadcast_result = CommunityAgent().broadcast_ceo_decision(dec)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Community broadcast failed: {e}")
+
+            return {
+                "status": "approved",
+                "id": decision_id,
+                "broadcast": broadcast_result,
+            }
     raise HTTPException(404, "Decision not found")
 
 
