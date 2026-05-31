@@ -4,36 +4,36 @@ import os
 router = APIRouter(prefix="/api/system", tags=["System"])
 
 
+@router.get("/ai-test")
+def ai_test():
+    """Test which AI provider is connected and working."""
+    from core.llm import ask, is_available, provider_name
+
+    if not is_available():
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+        gemini_key = os.environ.get("GEMINI_API_KEY", "")
+        return {
+            "ai_connected": False,
+            "reason": "No AI provider initialised",
+            "groq_key_set": bool(groq_key),
+            "gemini_key_set": bool(gemini_key),
+        }
+
+    result = ask("Say exactly three words: AI IS WORKING", fallback="")
+    if result:
+        return {
+            "ai_connected": True,
+            "provider": provider_name(),
+            "response": result,
+        }
+    return {
+        "ai_connected": False,
+        "provider": provider_name(),
+        "reason": "Provider initialised but request failed",
+    }
+
+
 @router.get("/gemini-test")
 def gemini_test():
-    """Test if Gemini is connected and working."""
-    key = os.environ.get("GEMINI_API_KEY", "") or os.environ.get("gemini_api_key", "")
-
-    if not key:
-        return {
-            "gemini_connected": False,
-            "reason": "GEMINI_API_KEY not set in environment",
-            "key_preview": None,
-        }
-
-    key_preview = f"{key[:6]}...{key[-4:]}"
-    try:
-        from google import genai as new_genai
-        client = new_genai.Client(api_key=key)
-        resp = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents="Say exactly: GEMINI_OK",
-        )
-        return {
-            "gemini_connected": True,
-            "sdk": "google-genai",
-            "model_used": "gemini-2.0-flash",
-            "response": resp.text.strip(),
-            "key_preview": key_preview,
-        }
-    except Exception as e:
-        return {
-            "gemini_connected": False,
-            "reason": str(e)[:200],
-            "key_preview": key_preview,
-        }
+    """Legacy endpoint — redirects to /api/system/ai-test."""
+    return ai_test()

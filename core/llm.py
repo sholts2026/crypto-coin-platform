@@ -1,6 +1,6 @@
 """
-LLM client — wraps Google Gemini Pro.
-Falls back gracefully to mock responses when no API key is set.
+LLM client — tries Groq first (fast, generous free tier), falls back to Gemini.
+Falls back gracefully to empty string when no AI is available.
 """
 from __future__ import annotations
 import os
@@ -8,46 +8,47 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_client = None
-_model  = None
-
-
-_sdk = None  # "new" or "old"
-_new_client = None
-_MODEL_NAME = "gemini-2.0-flash"
+_provider = None   # "groq" | "gemini" | None
+_groq_client = None
+_gemini_client = None
+_gemini_model = None
+_GROQ_MODEL = "llama-3.3-70b-versatile"
+_GEMINI_MODEL = "gemini-2.0-flash"
 
 
 def _init():
-    """Initialise without probing — avoids burning rate-limit quota on startup."""
-    global _client, _model, _sdk, _new_client
-    key = os.environ.get("GEMINI_API_KEY", "") or os.environ.get("gemini_api_key", "")
-    if not key:
-        return False
+    global _provider, _groq_client, _gemini_client, _gemini_model
 
-    # Prefer new SDK (google-genai) — required for AQ. key format
-    try:
-        from google import genai as new_genai
-        _new_client = new_genai.Client(api_key=key)
-        _model = _MODEL_NAME
-        _sdk = "new"
-        logger.info(f"Gemini (new SDK) ready, model={_MODEL_NAME} ✓")
-        return True
-    except ImportError:
-        logger.debug("google-genai not installed, trying legacy SDK")
-    except Exception as e:
-        logger.debug(f"New SDK init failed: {e}")
+    # ── 1. Try Groq ──────────────────────────────────────────────
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if groq_key:
+        try:
+            from groq import Groq
+            _groq_client = Groq(api_key=groq_key)
+            _provider = "groq"
+            logger.info(f"LLM: Groq ready ({_GROQ_MODEL}) ✓")
+            return True
+        except ImportError:
+            logger.debug("groq package not installed")
+        except Exception as e:
+            logger.warning(f"Groq init failed: {e}")
 
-    # Fallback: old SDK
-    try:
-        import google.generativeai as genai
-        genai.configure(api_key=key)
-        _model = genai.GenerativeModel("gemini-pro")
-        _sdk = "old"
-        logger.info("Gemini (legacy SDK) ready ✓")
-        return True
-    except Exception as e:
-        logger.warning(f"Gemini legacy SDK init failed: {e}")
+    # ── 2. Fall back to Gemini (new SDK) ─────────────────────────
+    gemini_key = os.environ.get("GEMINI_API_KEY", "") or os.environ.get("gemini_api_key", "")
+    if gemini_key:
+        try:
+            from google import genai as new_genai
+            _gemini_client = new_genai.Client(api_key=gemini_key)
+            _gemini_model = _GEMINI_MODEL
+            _provider = "gemini"
+            logger.info(f"LLM: Gemini ready ({_GEMINI_MODEL}) ✓")
+            return True
+        except ImportError:
+            logger.debug("google-genai not installed")
+        except Exception as e:
+            logger.debug(f"Gemini init failed: {e}")
 
+    logger.warning("LLM: no provider available — AI features disabled")
     return False
 
 
@@ -55,26 +56,38 @@ _ready = _init()
 
 
 def ask(prompt: str, fallback: str = "") -> str:
-    """
-    Send a prompt to Gemini.
-    Returns fallback string if Gemini is unavailable.
-    """
-    if not _ready or _model is None:
-        logger.debug("Gemini not available — using fallback")
+    """Send a prompt to the available LLM. Returns fallback if unavailable."""
+    if not _ready:
         return fallback
-    try:
-        if _sdk == "new" and _new_client is not None:
-            response = _new_client.models.generate_content(
-                model=_model, contents=prompt
+
+    if _provider == "groq" and _groq_client:
+        try:
+            resp = _groq_client.chat.completions.create(
+                model=_GROQ_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1024,
             )
-            return response.text.strip()
-        else:
-            response = _model.generate_content(prompt)
-            return response.text.strip()
-    except Exception as e:
-        logger.warning(f"Gemini request failed: {e}")
-        return fallback
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            logger.warning(f"Groq request failed: {e}")
+            return fallback
+
+    if _provider == "gemini" and _gemini_client:
+        try:
+            resp = _gemini_client.models.generate_content(
+                model=_gemini_model, contents=prompt
+            )
+            return resp.text.strip()
+        except Exception as e:
+            logger.warning(f"Gemini request failed: {e}")
+            return fallback
+
+    return fallback
 
 
 def is_available() -> bool:
-    return _ready and _model is not None
+    return _ready and _provider is not None
+
+
+def provider_name() -> str:
+    return _provider or "none"
