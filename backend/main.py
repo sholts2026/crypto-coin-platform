@@ -5,7 +5,7 @@ import os
 # Project root on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 
@@ -58,14 +58,32 @@ def health():
     return {"status": "ok"}
 
 
-@app.on_event("startup")
-def startup_event():
+@app.post("/telegram/webhook")
+async def telegram_webhook(request: Request):
     try:
-        from telegram_bot.bot import start_bot_thread
-        start_bot_thread()
+        from telegram_bot.bot import handle_update
+        data = await request.json()
+        handle_update(data)
     except Exception as e:
         import logging
-        logging.getLogger(__name__).warning(f"Telegram bot startup skipped: {e}")
+        logging.getLogger(__name__).warning(f"Telegram webhook error: {e}")
+    return {"ok": True}
+
+
+@app.on_event("startup")
+def startup_event():
+    railway_url = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
+    if railway_url:
+        base_url = f"https://{railway_url}"
+    else:
+        base_url = os.environ.get("BACKEND_URL", "")
+    if base_url:
+        try:
+            from telegram_bot.bot import register_webhook
+            register_webhook(base_url)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Webhook registration skipped: {e}")
 
 
 if __name__ == "__main__":
