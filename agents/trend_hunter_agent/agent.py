@@ -120,10 +120,12 @@ class TrendHunterAgent:
     def _fetch_live_trends(self) -> List[Dict]:
         """Live API adapters. Falls back to mock if all sources fail."""
         results = []
-        results += self._fetch_coingecko_trends()   # free, no key needed ✓
-        results += self._fetch_reddit_trends()       # free, no key needed ✓
-        results += self._fetch_google_trends()       # free, no key needed ✓
-        results += self._fetch_twitter_trends()      # requires paid API key
+        results += self._fetch_coingecko_trends()      # free, no key ✓
+        results += self._fetch_coingecko_categories()  # free, no key ✓
+        results += self._fetch_fear_and_greed()        # free, no key ✓
+        results += self._fetch_google_trends()         # free, no key ✓
+        results += self._fetch_reddit_trends()         # free, no key (may be blocked)
+        results += self._fetch_twitter_trends()        # requires paid API key
         if not results:
             return MOCK_TRENDS
         return results
@@ -134,6 +136,143 @@ class TrendHunterAgent:
             return []
         # Adapter stub — replace with tweepy or twitter-api-v2 client
         return []
+
+    def _fetch_coingecko_categories(self) -> List[Dict]:
+        """Fetch trending categories from CoinGecko (DeFi, AI, memes…) — no key needed."""
+        try:
+            import httpx
+            from core.llm import ask as llm_ask, is_available as llm_ready
+
+            r = httpx.get(
+                "https://api.coingecko.com/api/v3/coins/categories?order=market_cap_change_24h_desc",
+                headers={"Accept": "application/json"},
+                timeout=10,
+            )
+            if r.status_code != 200:
+                return []
+
+            categories = r.json()[:8]  # top 8 movers
+            results = []
+
+            for cat in categories:
+                name   = cat.get("name", "")
+                change = cat.get("market_cap_change_24h", 0) or 0
+                volume = cat.get("volume_24h", 0) or 0
+
+                if abs(change) < 1:  # skip flat categories
+                    continue
+
+                direction = "surging" if change > 0 else "crashing"
+                phrase = f"{name} category {direction} ({change:+.1f}% in 24h)"
+
+                why = ""
+                opportunities = []
+                if llm_ready():
+                    prompt = f"""The "{name}" crypto category moved {change:+.1f}% in 24h (volume: ${volume:,.0f}).
+In 1-2 sentences, explain what this means and what token opportunity it creates.
+Then give 2 short token narrative ideas (max 8 words each).
+WHY: <reason>
+IDEA1: <idea>
+IDEA2: <idea>"""
+                    raw = llm_ask(prompt, fallback="")
+                    for line in raw.splitlines():
+                        if line.startswith("WHY:"):   why = line[4:].strip()
+                        elif line.startswith("IDEA1:"): opportunities.append(line[6:].strip())
+                        elif line.startswith("IDEA2:"): opportunities.append(line[6:].strip())
+
+                velocity = min(92, max(40, 60 + int(abs(change) * 2)))
+                results.append({
+                    "phrase": phrase,
+                    "source_platform": "coingecko_categories",
+                    "velocity_score": velocity,
+                    "novelty_score": 75,
+                    "meme_potential": 70,
+                    "crypto_relevance": 95,
+                    "community_size": 75,
+                    "saturation_level": 30,
+                    "expected_lifespan_days": 7,
+                    "related_communities": ["CT", f"{name} communities", "DeFi"],
+                    "related_figures": [],
+                    "why_it_matters": why or f"{name} category moved {change:+.1f}% — high activity window.",
+                    "token_narrative_opportunities": opportunities or [
+                        f"New token in {name} narrative",
+                        f"Community play on {name} wave",
+                    ],
+                    "raw_data": {"market_cap_change_24h": change, "volume_24h": volume},
+                })
+
+            return results[:4]  # top 4 most relevant
+
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"CoinGecko categories failed: {e}")
+            return []
+
+    def _fetch_fear_and_greed(self) -> List[Dict]:
+        """Fetch Fear & Greed Index from alternative.me — no key needed."""
+        try:
+            import httpx
+            from core.llm import ask as llm_ask, is_available as llm_ready
+
+            r = httpx.get("https://api.alternative.me/fng/?limit=2", timeout=10)
+            if r.status_code != 200:
+                return []
+
+            data = r.json().get("data", [])
+            if not data:
+                return []
+
+            today     = data[0]
+            yesterday = data[1] if len(data) > 1 else data[0]
+
+            score       = int(today.get("value", 50))
+            label       = today.get("value_classification", "Neutral")
+            prev_score  = int(yesterday.get("value", 50))
+            change      = score - prev_score
+
+            phrase = f"Crypto Fear & Greed: {score}/100 — {label} (was {prev_score} yesterday)"
+
+            why = ""
+            opportunities = []
+            if llm_ready():
+                prompt = f"""The Crypto Fear & Greed Index is {score}/100 ({label}), changed {change:+d} from yesterday.
+In 1-2 sentences, explain what this market sentiment means for launching a new meme/community token.
+Then give 2 short token narrative ideas that match this sentiment.
+WHY: <reason>
+IDEA1: <idea>
+IDEA2: <idea>"""
+                raw = llm_ask(prompt, fallback="")
+                for line in raw.splitlines():
+                    if line.startswith("WHY:"):   why = line[4:].strip()
+                    elif line.startswith("IDEA1:"): opportunities.append(line[6:].strip())
+                    elif line.startswith("IDEA2:"): opportunities.append(line[6:].strip())
+
+            # High greed = good launch window; high fear = contrarian opportunity
+            velocity = min(88, max(40, score if score > 50 else 100 - score))
+            return [{
+                "phrase": phrase,
+                "source_platform": "fear_greed",
+                "velocity_score": velocity,
+                "novelty_score": 60,
+                "meme_potential": 80,
+                "crypto_relevance": 90,
+                "community_size": 85,
+                "saturation_level": 20,
+                "expected_lifespan_days": 3,
+                "related_communities": ["CT", "crypto Twitter", "retail investors"],
+                "related_figures": [],
+                "why_it_matters": why or f"Market sentiment at {score}/100 ({label}) — {('launch window' if score > 60 else 'contrarian opportunity')}.",
+                "token_narrative_opportunities": opportunities or [
+                    f"Token riding the {label.lower()} wave",
+                    "Community decides: fear or greed?",
+                ],
+                "raw_data": {"score": score, "label": label, "change_from_yesterday": change},
+            }]
+
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Fear & Greed fetch failed: {e}")
+            return []
 
     def _fetch_reddit_trends(self) -> List[Dict]:
         """Fetch hot posts from crypto subreddits — no API key needed."""
