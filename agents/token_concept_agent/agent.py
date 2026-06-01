@@ -38,6 +38,49 @@ CONCEPT_TEMPLATES = {
 }
 
 
+def _ticker_already_exists(ticker: str) -> bool:
+    """Check CoinGecko if a ticker is already taken by an existing coin."""
+    try:
+        import httpx
+        r = httpx.get(
+            f"https://api.coingecko.com/api/v3/search?query={ticker}",
+            headers={"Accept": "application/json"},
+            timeout=8,
+        )
+        if r.status_code != 200:
+            return False
+        coins = r.json().get("coins", [])
+        # Exact ticker match (case-insensitive)
+        for coin in coins[:10]:
+            if coin.get("symbol", "").upper() == ticker.upper():
+                return True
+        return False
+    except Exception:
+        return False  # if check fails, allow it through
+
+
+def _make_unique_ticker(base_ticker: str, token_name: str) -> str:
+    """If ticker exists, generate alternatives until we find a free one."""
+    if not _ticker_already_exists(base_ticker):
+        return base_ticker
+
+    # Try common variations
+    candidates = [
+        base_ticker + "X",
+        base_ticker + "2",
+        base_ticker[0] + "NEW",
+        "".join(w[0] for w in token_name.upper().split() if w.isalpha())[:5],
+        base_ticker[:3] + "AI",
+    ]
+    for candidate in candidates:
+        if candidate and not _ticker_already_exists(candidate):
+            return candidate
+
+    # Last resort: add timestamp suffix
+    import time
+    return base_ticker[:3] + str(int(time.time()) % 100)
+
+
 def _ai_enhance_concept(trend: Dict, opportunity: str) -> Dict:
     """Use Gemini to generate a creative token concept from a trend opportunity."""
     phrase = trend.get("phrase", "")
@@ -90,7 +133,8 @@ def _generate_concepts_for_trend(trend: Dict) -> List[Dict]:
         ai_data = _ai_enhance_concept(trend, opp) if llm_ready() else {}
 
         name    = ai_data.get("token_name") or _derive_name_ticker(opp, trend["phrase"])[0]
-        ticker  = ai_data.get("ticker") or _derive_name_ticker(opp, trend["phrase"])[1]
+        raw_ticker = ai_data.get("ticker") or _derive_name_ticker(opp, trend["phrase"])[1]
+        ticker  = _make_unique_ticker(raw_ticker.upper(), name)
         narrative = ai_data.get("one_line_narrative") or opp
         meme    = ai_data.get("meme_angle") or template["meme_angle"]
         community = ai_data.get("target_community") or template["community"]
@@ -120,6 +164,8 @@ def _generate_concepts_for_trend(trend: Dict) -> List[Dict]:
             "approval_status": "pending",
             "ceo_notes": "",
             "ai_generated": bool(ai_data),
+            "ticker_verified_unique": ticker == raw_ticker.upper() or not _ticker_already_exists(ticker),
+            "ticker_original": raw_ticker.upper() if ticker != raw_ticker.upper() else None,
         })
     return concepts
 
