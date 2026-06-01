@@ -77,21 +77,21 @@ def run_full_pipeline(use_mock: bool = False, auto_approve: bool = True):
 
     # 7. Risk
     try:
-        from agents.risk_agent.agent import RiskAgent
+        from agents.risk_review_agent.agent import RiskReviewAgent
         ideas = memory.load_token_ideas()
-        out = RiskAgent().run(ideas)
+        out = RiskReviewAgent().run(ideas)
         results["risk_reviews"] = len(out.output or [])
     except Exception as e:
         results["risk_error"] = str(e)
 
     # 8. Smart contract for top idea
     try:
-        from agents.contract_agent.agent import ContractAgent
+        from agents.token_builder_agent.agent import TokenBuilderAgent
         ideas = memory.load_token_ideas()
         if ideas:
             top = ideas[0]
-            out = ContractAgent().run(top)
-            results["contract"] = out.output.get("ticker", "?") if out.output else "?"
+            out = TokenBuilderAgent().run(top)
+            results["contract"] = out.output.get("ticker", "?") if isinstance(out.output, dict) else "generated"
     except Exception as e:
         results["contract_error"] = str(e)
 
