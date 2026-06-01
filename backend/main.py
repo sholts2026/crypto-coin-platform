@@ -89,6 +89,23 @@ def startup_event():
             import logging
             logging.getLogger(__name__).warning(f"Webhook registration skipped: {e}")
 
+    # Start autonomous CEO scheduler
+    try:
+        from backend.scheduler import start_scheduler
+        start_scheduler()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Scheduler start skipped: {e}")
+
+
+@app.on_event("shutdown")
+def shutdown_event():
+    try:
+        from backend.scheduler import stop_scheduler
+        stop_scheduler()
+    except Exception:
+        pass
+
 
 if __name__ == "__main__":
     import uvicorn

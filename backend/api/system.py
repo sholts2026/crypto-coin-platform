@@ -37,3 +37,23 @@ def ai_test():
 def gemini_test():
     """Legacy endpoint — redirects to /api/system/ai-test."""
     return ai_test()
+
+
+@router.get("/scheduler")
+def scheduler_status():
+    """Check autonomous CEO scheduler — running status and next run times."""
+    from backend.scheduler import get_scheduler_status
+    return get_scheduler_status()
+
+
+@router.post("/scheduler/run-now")
+def scheduler_run_now():
+    """Trigger CEO pipeline immediately (same as scheduled job)."""
+    from backend.scheduler import job_ceo_pipeline
+    import threading
+    thread = threading.Thread(target=job_ceo_pipeline, daemon=True)
+    thread.start()
+    return {
+        "status": "started",
+        "message": "CEO pipeline running in background — check Telegram in ~30 seconds",
+    }
