@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from core import memory
+import os
 
 router = APIRouter(prefix="/api/launch-readiness", tags=["Launch"])
 
@@ -27,9 +28,12 @@ def get_launch_readiness():
         "risk_review_completed":         completed_risks,
         "social_infrastructure_prepared":len(approved_drafts) >= 3,
         "first_content_calendar_ready":  len(approved_drafts) >= 10,
-        "community_channels_ready":      False,  # manual check
+        "community_channels_ready":      bool(
+            (os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHANNEL_ID"))
+            or os.environ.get("DISCORD_WEBHOOK_URL")
+        ),
         "smart_contract_generated":      len(contracts) > 0,
-        "smart_contract_tests_passed":   False,  # manual check
+        "smart_contract_tests_passed":   False,  # manual check — run pytest after audit
         "tokenomics_reviewed":           len(contracts) > 0,
         "launch_report_generated":       latest_decision is not None,
         "human_approval_received":       bool(human_approved),
