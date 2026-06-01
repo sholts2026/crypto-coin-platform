@@ -161,7 +161,7 @@ class TrendHunterAgent:
                     for p in posts:
                         d = p.get("data", {})
                         score = d.get("score", 0)
-                        if score > 50:  # only posts with traction
+                        if score > 10:  # lower threshold — subreddits vary in size
                             all_posts.append({
                                 "title":     d.get("title", ""),
                                 "score":     score,
@@ -283,6 +283,18 @@ IDEA2: <token narrative idea>
             if not rising_terms:
                 return []
 
+            # Filter to crypto-relevant terms only
+            CRYPTO_KEYWORDS = [
+                "coin", "token", "crypto", "defi", "nft", "blockchain", "bitcoin",
+                "ethereum", "altcoin", "wallet", "dex", "swap", "launch", "mint",
+                "airdrop", "memecoin", "solana", "base", "layer", "protocol",
+            ]
+            filtered = [
+                t for t in rising_terms
+                if any(kw in t["term"].lower() for kw in CRYPTO_KEYWORDS)
+            ]
+            # Fall back to all rising terms if filter removes everything
+            rising_terms = filtered if filtered else rising_terms
             rising_terms.sort(key=lambda x: x["value"], reverse=True)
             top_terms = rising_terms[:6]
 
