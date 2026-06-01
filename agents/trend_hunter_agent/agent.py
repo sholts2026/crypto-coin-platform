@@ -121,9 +121,9 @@ class TrendHunterAgent:
         """Live API adapters. Falls back to mock if all sources fail."""
         results = []
         results += self._fetch_coingecko_trends()   # free, no key needed ✓
-        results += self._fetch_twitter_trends()
-        results += self._fetch_reddit_trends()
-        results += self._fetch_google_trends()
+        results += self._fetch_reddit_trends()       # free, no key needed ✓
+        results += self._fetch_google_trends()       # free, no key needed ✓
+        results += self._fetch_twitter_trends()      # requires paid API key
         if not results:
             return MOCK_TRENDS
         return results
@@ -136,18 +136,207 @@ class TrendHunterAgent:
         return []
 
     def _fetch_reddit_trends(self) -> List[Dict]:
-        from core.config import settings
-        if not settings.reddit_client_id:
+        """Fetch hot posts from crypto subreddits — no API key needed."""
+        import httpx
+        from core.llm import ask as llm_ask, is_available as llm_ready
+
+        SUBREDDITS = [
+            "CryptoCurrency", "memecoins", "SatoshiStreetBets", "defi", "altcoin"
+        ]
+        headers = {"User-Agent": "CryptoLaunchBot/1.0 (research tool)"}
+        results = []
+
+        # Collect top posts across subreddits
+        all_posts = []
+        for sub in SUBREDDITS:
+            try:
+                r = httpx.get(
+                    f"https://www.reddit.com/r/{sub}/hot.json?limit=15",
+                    headers=headers,
+                    timeout=10,
+                    follow_redirects=True,
+                )
+                if r.status_code == 200:
+                    posts = r.json().get("data", {}).get("children", [])
+                    for p in posts:
+                        d = p.get("data", {})
+                        score = d.get("score", 0)
+                        if score > 50:  # only posts with traction
+                            all_posts.append({
+                                "title":     d.get("title", ""),
+                                "score":     score,
+                                "comments":  d.get("num_comments", 0),
+                                "subreddit": sub,
+                                "url":       d.get("url", ""),
+                            })
+            except Exception:
+                continue
+
+        if not all_posts:
             return []
-        # Adapter stub — replace with praw
-        return []
+
+        # Sort by score and take top 10
+        all_posts.sort(key=lambda x: x["score"] + x["comments"] * 2, reverse=True)
+        top_posts = all_posts[:10]
+
+        # Group into trend phrases using AI
+        if llm_ready():
+            titles_txt = "\n".join(f"- {p['title']} (r/{p['subreddit']}, {p['score']} upvotes)"
+                                   for p in top_posts)
+            prompt = f"""These are the hottest crypto Reddit posts right now:
+{titles_txt}
+
+Identify 3-4 distinct trending NARRATIVES or THEMES from these posts.
+For each, output exactly:
+PHRASE: <short catchy phrase describing the trend>
+WHY: <1 sentence why it matters>
+IDEA1: <token narrative idea>
+IDEA2: <token narrative idea>
+---"""
+            raw = llm_ask(prompt, fallback="")
+            blocks = [b.strip() for b in raw.split("---") if b.strip()]
+            for block in blocks[:4]:
+                lines = block.splitlines()
+                data = {}
+                for line in lines:
+                    for key in ("PHRASE", "WHY", "IDEA1", "IDEA2"):
+                        if line.startswith(f"{key}:"):
+                            data[key] = line[len(key)+1:].strip()
+                if "PHRASE" not in data:
+                    continue
+                # Estimate velocity from post scores
+                avg_score = sum(p["score"] for p in top_posts[:3]) / 3
+                velocity = min(90, max(40, int(avg_score / 100)))
+                results.append({
+                    "phrase": data["PHRASE"],
+                    "source_platform": "reddit",
+                    "velocity_score": velocity,
+                    "novelty_score": 72,
+                    "meme_potential": 80,
+                    "crypto_relevance": 88,
+                    "community_size": 85,
+                    "saturation_level": 35,
+                    "expected_lifespan_days": 10,
+                    "related_communities": [f"r/{s}" for s in SUBREDDITS[:3]],
+                    "related_figures": [],
+                    "why_it_matters": data.get("WHY", ""),
+                    "token_narrative_opportunities": [
+                        data.get("IDEA1", ""), data.get("IDEA2", "")
+                    ],
+                    "raw_data": {
+                        "top_post_score": top_posts[0]["score"] if top_posts else 0,
+                        "posts_analyzed": len(all_posts),
+                    },
+                })
+        else:
+            # Fallback: one trend per top post
+            for post in top_posts[:3]:
+                results.append({
+                    "phrase": post["title"][:80],
+                    "source_platform": "reddit",
+                    "velocity_score": min(90, post["score"] // 100 + 40),
+                    "novelty_score": 65,
+                    "meme_potential": 70,
+                    "crypto_relevance": 80,
+                    "community_size": 80,
+                    "saturation_level": 30,
+                    "expected_lifespan_days": 7,
+                    "related_communities": [f"r/{post['subreddit']}"],
+                    "related_figures": [],
+                    "why_it_matters": f"Hot post on r/{post['subreddit']} with {post['score']} upvotes.",
+                    "token_narrative_opportunities": [],
+                    "raw_data": {"score": post["score"], "comments": post["comments"]},
+                })
+
+        return results
 
     def _fetch_google_trends(self) -> List[Dict]:
-        from core.config import settings
-        if not settings.google_trends_enabled:
+        """Fetch rising crypto search terms from Google Trends — no API key needed."""
+        try:
+            from pytrends.request import TrendReq
+            from core.llm import ask as llm_ask, is_available as llm_ready
+
+            pytrends = TrendReq(hl="en-US", tz=0, timeout=(10, 25))
+
+            # Search for rising queries around crypto topics
+            kw_groups = [
+                ["crypto token", "meme coin", "new coin 2025"],
+                ["DeFi", "crypto launch", "altcoin"],
+            ]
+
+            rising_terms = []
+            for kws in kw_groups:
+                try:
+                    pytrends.build_payload(kws, timeframe="now 7-d", geo="")
+                    related = pytrends.related_queries()
+                    for kw in kws:
+                        rising = related.get(kw, {}).get("rising")
+                        if rising is not None and not rising.empty:
+                            for _, row in rising.head(3).iterrows():
+                                term = str(row.get("query", ""))
+                                val  = int(row.get("value", 0))
+                                if term and val > 0:
+                                    rising_terms.append({"term": term, "value": val})
+                except Exception:
+                    continue
+
+            if not rising_terms:
+                return []
+
+            rising_terms.sort(key=lambda x: x["value"], reverse=True)
+            top_terms = rising_terms[:6]
+
+            results = []
+            for item in top_terms:
+                term  = item["term"]
+                value = item["value"]  # breakout = >5000%
+
+                why = ""
+                opportunities = []
+                if llm_ready():
+                    prompt = f""""{term}" is a rapidly rising Google search trend in the crypto space (breakout score: {value}).
+In 1-2 sentences, explain what this trend signals and what token opportunity it creates.
+Then give 2 short token narrative ideas (max 8 words each).
+Format:
+WHY: <reason>
+IDEA1: <idea>
+IDEA2: <idea>"""
+                    raw = llm_ask(prompt, fallback="")
+                    for line in raw.splitlines():
+                        if line.startswith("WHY:"):
+                            why = line[4:].strip()
+                        elif line.startswith("IDEA1:"):
+                            opportunities.append(line[6:].strip())
+                        elif line.startswith("IDEA2:"):
+                            opportunities.append(line[6:].strip())
+
+                velocity = min(92, max(50, 50 + value // 100)) if value < 5000 else 90
+                results.append({
+                    "phrase": f"{term} (Google rising search)",
+                    "source_platform": "google_trends",
+                    "velocity_score": velocity,
+                    "novelty_score": 85,
+                    "meme_potential": 65,
+                    "crypto_relevance": 78,
+                    "community_size": 60,
+                    "saturation_level": 20,
+                    "expected_lifespan_days": 14,
+                    "related_communities": ["CT", "Google searchers", "normie crypto"],
+                    "related_figures": [],
+                    "why_it_matters": why or f"'{term}' is breaking out on Google Search — early signal.",
+                    "token_narrative_opportunities": opportunities or [
+                        f"Token riding the {term} wave",
+                        f"Community around {term} narrative",
+                    ],
+                    "raw_data": {"google_breakout_score": value, "term": term},
+                })
+
+            return results
+
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Google Trends fetch failed: {e}")
             return []
-        # Adapter stub — replace with pytrends
-        return []
 
     def _fetch_coingecko_trends(self) -> List[Dict]:
         """Fetch real trending coins from CoinGecko (free, no API key needed)."""
